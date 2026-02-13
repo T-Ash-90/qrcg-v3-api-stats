@@ -4,12 +4,14 @@ import time
 from datetime import datetime
 
 BASE_URL = "https://api.qrcg.com/v3"
-RATE_LIMIT_DELAY = 0.12  # throttle requests torespect the 10 per second rate limit
+RATE_LIMIT_DELAY = 0.12  # respect 10 requests/sec
 
 
 def get_all_qr_codes(api_key):
     qr_codes = []
-    cursor = 0
+    cursor = None 
+    page_count = 0
+    max_pages = 10000
 
     headers = {
         "Authorization": f"Key {api_key}",
@@ -17,17 +19,34 @@ def get_all_qr_codes(api_key):
     }
 
     while True:
-        url = f"{BASE_URL}/qrcodes?perPage=50&cursor={cursor}"
+        if cursor:
+            url = f"{BASE_URL}/qrcodes?perPage=50&cursor={cursor}"
+        else:
+            url = f"{BASE_URL}/qrcodes?perPage=50"
+
         response = requests.get(url, headers=headers)
         response.raise_for_status()
 
         data = response.json()
-        qr_codes.extend(data["data"])
 
-        if data["pagination"].get("hasMore"):
-            cursor += 50
+        qr_codes.extend(data.get("data", []))
+
+        pagination = data.get("pagination", {})
+        has_more = pagination.get("hasMore", False)
+        next_cursor = pagination.get("nextCursor")
+
+        page_count += 1
+
+        print(f"Fetched page {page_count} | Total codes so far: {len(qr_codes)}")
+
+        if has_more and next_cursor:
+            cursor = next_cursor
             time.sleep(RATE_LIMIT_DELAY)
         else:
+            break
+
+        if page_count >= max_pages:
+            print("Pagination safeguard triggered.")
             break
 
     return qr_codes
@@ -36,8 +55,7 @@ def get_all_qr_codes(api_key):
 def get_total_scans(api_key, qr_id):
     headers = {
         "Authorization": f"Key {api_key}",
-        "Accept": "application/json",
-        "Content-Type": "application/json"
+        "Accept": "application/json"
     }
 
     url = f"{BASE_URL}/qrcodes/{qr_id}/scans/total"
@@ -51,8 +69,7 @@ def get_total_scans(api_key, qr_id):
 def get_range_scans(api_key, qr_id, start_date, end_date):
     headers = {
         "Authorization": f"Key {api_key}",
-        "Accept": "application/json",
-        "Content-Type": "application/json"
+        "Accept": "application/json"
     }
 
     url = (
@@ -94,7 +111,7 @@ def main():
 
     print("\nFetching QR Codes...")
     qr_codes = get_all_qr_codes(api_key)
-    print(f"Found {len(qr_codes)} QR Codes.\n")
+    print(f"\nFound {len(qr_codes)} QR Codes.\n")
 
     filename = "qr_code_statistics.csv"
 
@@ -112,8 +129,9 @@ def main():
                 "Created At", "Date", "Total Scans", "Unique Scans"
             ])
 
-        for qr in qr_codes:
+        for index, qr in enumerate(qr_codes, start=1):
             qr_id = qr["id"]
+            print(f"Processing {index}/{len(qr_codes)} - QR ID: {qr_id}")
 
             if choice == "1":
                 stats = get_total_scans(api_key, qr_id)
@@ -146,7 +164,6 @@ def main():
                             total,
                             unique
                         ])
-
 
     print(f"\nExport complete! Data saved to {filename}")
 
