@@ -4,12 +4,12 @@ import time
 from datetime import datetime
 
 BASE_URL = "https://api.qrcg.com/v3"
-RATE_LIMIT_DELAY = 0.12  # respect 10 requests/sec
+RATE_LIMIT_DELAY = 0.11
 
 
 def get_all_qr_codes(api_key):
     qr_codes = []
-    cursor = None 
+    cursor = None
     page_count = 0
     max_pages = 10000
 
